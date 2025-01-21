@@ -11,5 +11,5 @@ int main() {
   std::string input;
   std::getline(std::cin, input);
 
-  std::cout << "invalid_command: command not found";
+  std::cout << "invalid_apple_command: command not found";
 }
