@@ -1,14 +1,36 @@
 #include <iostream>
 #include <algorithm>
+#include <string>
 #include <array>
+#include <sstream>
+#include <filesystem>
+
+std::string get_path(std::string command)
+{
+  std::string path_env = std::getenv("PATH");
+  std::stringstream ss(path_env);
+  std::string path;
+  while (!ss.eof())
+  {
+    getline(ss, path, ':');
+    std::string abs_path = path + "/" + command;
+    if (std::filesystem::exists(abs_path))
+    {
+      return abs_path;
+    }
+  }
+  return "";
+}
 
 int main()
 {
+  bool exit = false;
+
   // Flush after every std::cout / std:cerr
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
 
-  for (;;)
+  while (!exit)
   {
     std::cout << "$ ";
     std::string input;
@@ -16,7 +38,11 @@ int main()
     bool command_handled = false;
 
     //Exit Command
-    if (input == "exit 0") return 0;
+    if (input == "exit 0")
+    {
+      exit = true;
+      command_handled = true;
+    }
 
     //Echo Command
     if (input.rfind("echo ", 0) == 0)
@@ -30,15 +56,22 @@ int main()
     if (input.starts_with("type "))
     {
       std::array builtins{"exit", "echo", "type"};
-      std::string arg = input.substr(5);
+      std::string cmd = input.substr(5);
 
-      if (std::ranges::find(builtins, arg) != builtins.end())
+      if (std::ranges::find(builtins, cmd) != builtins.end())
       {
-        std::cout << arg << " is a shell builtin" << std::endl;
+        std::cout << cmd << " is a shell builtin" << std::endl;
       }
       else
       {
-        std::cout << arg << ": not found" << std::endl;
+        if (std::string path = get_path(cmd); path.empty())
+        {
+          std::cout << cmd << ": not found\n";
+        }
+        else
+        {
+          std::cout << input.substr(5) << " is " << path << std::endl;
+        }
       }
       command_handled = true;
     }
@@ -49,4 +82,5 @@ int main()
       std::cout << input << ": command not found\n";
     }
   }
+  return 0;
 }
