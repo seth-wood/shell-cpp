@@ -38,7 +38,7 @@ void handle_echo_command(const std::string& input)
 // Function to handle the "type" command
 void handle_type_command(const std::string& input)
 {
-    const std::array builtins{"exit", "echo", "type"};
+    const std::array builtins{"exit", "echo", "type", "pwd"};
     std::string cmd = input.substr(5);
 
     if (std::ranges::find(builtins, cmd) != builtins.end())
@@ -104,6 +104,11 @@ void execute_program(const std::vector<std::string>& args)
     }
 }
 
+void handle_pwd_command()
+{
+    std::cout << std::filesystem::current_path().string() << std::endl;
+}
+
 // Function to process user input
 void process_input(const std::string& input, bool& exit)
 {
@@ -129,6 +134,10 @@ void process_input(const std::string& input, bool& exit)
     else if (args[0] == "type")
     {
         handle_type_command(input);
+    }
+    else if (args[0] == "pwd")
+    {
+        handle_pwd_command();
     }
     else
     {
