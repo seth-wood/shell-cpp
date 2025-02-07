@@ -4,83 +4,152 @@
 #include <array>
 #include <sstream>
 #include <filesystem>
+#include <optional>
+#include <vector>
+#include <sys/wait.h>
+#include <unistd.h>
 
-std::string get_path(std::string command)
+// Function to get the absolute path of a command
+std::optional<std::string> get_path(const std::string& command)
 {
-  std::string path_env = std::getenv("PATH");
-  std::stringstream ss(path_env);
-  std::string path;
-  while (!ss.eof())
-  {
-    getline(ss, path, ':');
-    std::string abs_path = path + "/" + command;
-    if (std::filesystem::exists(abs_path))
+    const char* path_env = std::getenv("PATH");
+    if (!path_env) return std::nullopt;
+
+    std::stringstream ss(path_env);
+    std::string path;
+    while (getline(ss, path, ':'))
     {
-      return abs_path;
+        std::string abs_path = path + "/" + command;
+        if (std::filesystem::exists(abs_path))
+        {
+            return abs_path;
+        }
     }
-  }
-  return "";
+    return std::nullopt;
 }
 
-int main()
+// Function to handle the "echo" command
+void handle_echo_command(const std::string& input)
 {
-  bool exit = false;
+    std::string echo = input.substr(5);
+    std::cout << echo << std::endl;
+}
 
-  // Flush after every std::cout / std:cerr
-  std::cout << std::unitbuf;
-  std::cerr << std::unitbuf;
+// Function to handle the "type" command
+void handle_type_command(const std::string& input)
+{
+    const std::array builtins{"exit", "echo", "type"};
+    std::string cmd = input.substr(5);
 
-  while (!exit)
-  {
-    std::cout << "$ ";
-    std::string input;
-    std::getline(std::cin, input);
-    bool command_handled = false;
-
-    //Exit Command
-    if (input == "exit 0")
+    if (std::ranges::find(builtins, cmd) != builtins.end())
     {
-      exit = true;
-      command_handled = true;
-    }
-
-    //Echo Command
-    if (input.rfind("echo ", 0) == 0)
-    {
-      std::string echo = input.substr(5);
-      std::cout << echo << std::endl;
-      command_handled = true;
-    }
-
-    //Type Command
-    if (input.starts_with("type "))
-    {
-      std::array builtins{"exit", "echo", "type"};
-      std::string cmd = input.substr(5);
-
-      if (std::ranges::find(builtins, cmd) != builtins.end())
-      {
         std::cout << cmd << " is a shell builtin" << std::endl;
-      }
-      else
-      {
-        if (std::string path = get_path(cmd); path.empty())
+    }
+    else
+    {
+        if (auto path = get_path(cmd); path)
         {
-          std::cout << cmd << ": not found\n";
+            std::cout << cmd << " is " << *path << std::endl;
         }
         else
         {
-          std::cout << input.substr(5) << " is " << path << std::endl;
+            std::cout << cmd << ": not found\n";
         }
-      }
-      command_handled = true;
+    }
+}
+
+// Function to parse command line into arguments
+std::vector<std::string> parse_command(const std::string& input)
+{
+    std::vector<std::string> args;
+    std::istringstream iss(input);
+    std::string arg;
+    while (iss >> arg)
+    {
+        args.push_back(arg);
+    }
+    return args;
+}
+
+// Function to execute a program
+void execute_program(const std::vector<std::string>& args)
+{
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+        // Child process
+        std::vector<char*> c_args;
+        for (const auto& arg : args)
+        {
+            c_args.push_back(const_cast<char*>(arg.c_str()));
+        }
+        c_args.push_back(nullptr);
+
+        execvp(args[0].c_str(), c_args.data());
+
+        // If execvp returns, it means there was an error
+        std::cerr << args[0] << ": command not found\n";
+        exit(1);
+    }
+    else if (pid > 0)
+    {
+        // Parent process
+        int status;
+        waitpid(pid, &status, 0);
+    }
+    else
+    {
+        // Fork failed
+        std::cerr << "Fork failed\n";
+    }
+}
+
+// Function to process user input
+void process_input(const std::string& input, bool& exit)
+{
+    if (input.empty())
+    {
+        return;
     }
 
-    //Command Not Found
-    if (!command_handled)
+    auto args = parse_command(input);
+    if (args.empty())
     {
-      std::cout << input << ": command not found\n";
+        return;
     }
-  }
-  return 0;
+
+    if (args[0] == "exit" && args.size() > 1 && args[1] == "0")
+    {
+        exit = true;
+    }
+    else if (args[0] == "echo")
+    {
+        handle_echo_command(input);
+    }
+    else if (args[0] == "type")
+    {
+        handle_type_command(input);
+    }
+    else
+    {
+        execute_program(args);
+    }
+}
+
+// Main function
+int main()
+{
+    bool exit = false;
+
+    // Flush after every std::cout / std::cerr
+    std::cout << std::unitbuf;
+    std::cerr << std::unitbuf;
+
+    while (!exit)
+    {
+        std::cout << "$ ";
+        std::string input;
+        std::getline(std::cin, input);
+        process_input(input, exit);
+    }
 }
